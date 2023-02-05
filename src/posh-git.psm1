@@ -8,9 +8,14 @@ param([bool]$ForcePoshGitPrompt, [bool]$UseLegacyTabExpansion, [bool]$EnableProx
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = "Stop"
 
-. "C:\Users\domin\Repos\EnvConfigs\_tools\profiler.autogen.ps1" `
-    -__PROFILER_SetDebugVerbose `
-    -__PROFILER_WriteOn_LogEvent
+function __logScopePush {}
+function __logScopePop {}
+function __logEvent {}
+
+# provides implementations of `__log*` methods:
+# . "$HOME\Repos\EnvConfigs\_tools\profiler.autogen.ps1" `
+    # -__PROFILER_SetDebugVerbose `
+    # -__PROFILER_WriteOn_LogEvent
 
 
 __logScopePush "no-prompt-req"
@@ -206,8 +211,13 @@ $ExecutionContext.SessionState.Module.OnRemove = {
     Write-Warning 'If your prompt function uses any posh-git commands, it will cause posh-git to be re-imported every time your prompt function is invoked.'
 }
 
+function Show-LogAllEvents () {
+    $(__logShowAllEvents_WriteHost)
+}
+
 $exportModuleMemberParams = @{
     Function = @(
+        'Show-LogAllEvents',
         'Add-PoshGitToProfile',
         'Expand-GitCommand',
         'Format-GitBranchName',
