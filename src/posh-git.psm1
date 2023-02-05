@@ -1,25 +1,69 @@
+#######################################################################
+# pwsh -NoProfile -NoExit -WorkingDirectory "$HOME\Repos\posh-git-no-prompt" -Command { function prompt { "custom-prompt> " }; Import-Module -Name "$HOME\Repos\posh-git-no-prompt\src\posh-git.psm1" }
+
+
 param([bool]$ForcePoshGitPrompt, [bool]$UseLegacyTabExpansion, [bool]$EnableProxyFunctionExpansion)
 
+
+Set-StrictMode -Version 3.0
+$ErrorActionPreference = "Stop"
+
+. "C:\Users\domin\Repos\EnvConfigs\_tools\profiler.autogen.ps1" `
+    -__PROFILER_SetDebugVerbose `
+    -__PROFILER_WriteOn_LogEvent
+
+
+__logScopePush "no-prompt-req"
+
+$Global:GitStatus = $null
+
+__logScopePop
+
+
+__logScopePush "posh-git.psm1"
+
+__logScopePush "CheckRequirements"
 if (Test-Path Env:\POSHGIT_ENABLE_STRICTMODE) {
     # Set strict mode to latest to help catch scripting errors in the module. This is done by the Pester tests.
     Set-StrictMode -Version Latest
 }
 
+__logEvent "executing CheckRequirements"
 . $PSScriptRoot\CheckRequirements.ps1 > $null
 
+function switchLogScope ($name) {
+    __logScopePop
+    __logScopePush $name
+}
+
+
+switchLogScope "ConsoleMode"
 . $PSScriptRoot\ConsoleMode.ps1
+switchLogScope "Utils"
 . $PSScriptRoot\Utils.ps1
+switchLogScope "AnsiUtils"
 . $PSScriptRoot\AnsiUtils.ps1
+switchLogScope "WindowTitle"
 . $PSScriptRoot\WindowTitle.ps1
+switchLogScope "PoshGitTypes"
 . $PSScriptRoot\PoshGitTypes.ps1
+switchLogScope "GitUtils"
 . $PSScriptRoot\GitUtils.ps1
+switchLogScope "GitPrompt"
 . $PSScriptRoot\GitPrompt.ps1
+switchLogScope "GitParamTabExpansion"
 . $PSScriptRoot\GitParamTabExpansion.ps1
+switchLogScope "GitTabExpansion"
 . $PSScriptRoot\GitTabExpansion.ps1
+switchLogScope "TortoiseGit"
 . $PSScriptRoot\TortoiseGit.ps1
 
+switchLogScope "IsAdmin"
 $IsAdmin = Test-Administrator
+__logScopePop
 
+
+__logScopePush "prompt-setup"
 # Get the default prompt definition.
 $initialSessionState = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InitialSessionState
 if (!$initialSessionState -or !$initialSessionState.PSObject.Properties.Match('Commands') -or !$initialSessionState.Commands['prompt']) {
@@ -142,7 +186,10 @@ if ($ForcePoshGitPrompt -or !$currentPromptDef -or ($currentPromptDef -eq $defau
     # Set the posh-git prompt as the default prompt
     Set-Item Function:\prompt -Value $GitPromptScriptBlock
 }
+__logScopePop
 
+
+__logScopePush "module-setup"
 # Install handler for removal/unload of the module
 $ExecutionContext.SessionState.Module.OnRemove = {
     $global:VcsPromptStatuses = $global:VcsPromptStatuses | Where-Object { $_ -ne $PoshGitVcsPrompt }
@@ -191,3 +238,7 @@ $exportModuleMemberParams = @{
 }
 
 Export-ModuleMember @exportModuleMemberParams
+__logScopePop
+
+
+__logScopePop

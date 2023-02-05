@@ -531,11 +531,15 @@ function Expand-GitProxyFunction($command) {
 }
 
 function WriteTabExpLog([string] $Message) {
+    __logEvent $Message
     if (!$global:GitTabSettings.EnableLogging) { return }
 
     $timestamp = Get-Date -Format HH:mm:ss
     "[$timestamp] $Message" | Out-File -Append $global:GitTabSettings.LogPath
 }
+
+
+__logScopePush "ArgumentCompleter"
 
 if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
     $cmdNames = "git","tgit","gitk"
@@ -554,9 +558,11 @@ if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
     }
 
     $global:GitTabSettings.RegisteredCommands = $cmdNames -join ", "
+    __logEvent "RegisteredCommands: $($global:GitTabSettings.RegisteredCommands)"
 
     Microsoft.PowerShell.Core\Register-ArgumentCompleter -CommandName $cmdNames -Native -ScriptBlock {
         param($wordToComplete, $commandAst, $cursorPosition)
+        __logScopePush "autocomplete"
 
         # The PowerShell completion has a habit of stripping the trailing space when completing:
         # git checkout <tab>
@@ -567,8 +573,28 @@ if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
             $textToComplete = Expand-GitProxyFunction($textToComplete)
         }
 
-        WriteTabExpLog "Expand: command: '$($commandAst.Extent.Text)', padded: '$textToComplete', padlen: $padLength"
-        Expand-GitCommand $textToComplete
+        $extext = $commandAst.Extent.Text
+        WriteTabExpLog "Expand: command: '$extext', padded: '$textToComplete', padlen: $padLength"
+
+        try { Expand-GitCommand $textToComplete }
+        catch {
+            $extextField = "'$extext' [$($extext.Length)]".PadLeft(45)
+            Write-Warning ""
+            Write-Warning "_____________________________________________________________"
+            Write-Warning "While expanding:$extextField"
+            Write-Warning ("Encountered an exception:`n" + $_.InvocationInfo.PositionMessage)
+            foreach ($line in "$($_.Exception)" -split "`n") {
+                Write-Warning $line
+                if ($line -match "^\s*at System\.Management\.Automation\.Interpreter\..+$") {
+                    Write-Warning "(...)"
+                    break;
+                }
+            }
+
+            throw $_
+        }
+
+        __logScopePop
     }
 }
 else {
@@ -612,3 +638,5 @@ Microsoft.PowerShell.Core\Register-ArgumentCompleter -CommandName Remove-GitBran
 
     gitBranches $WordToComplete $true
 }
+
+__logScopePop
