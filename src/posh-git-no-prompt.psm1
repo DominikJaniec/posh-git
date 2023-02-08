@@ -1,5 +1,5 @@
 #######################################################################
-# pwsh -NoProfile -NoExit -WorkingDirectory "$HOME\Repos\posh-git-no-prompt" -Command { function prompt { "custom-prompt> " }; Import-Module -Name "$HOME\Repos\posh-git-no-prompt\src\posh-git-no-prompt.psm1" }
+# pwsh -NoProfile -NoExit -WorkingDirectory "$HOME\Repos\posh-git" -Command { function prompt { "custom-prompt> " }; Import-Module -Name "$HOME\Repos\posh-git\src\posh-git-no-prompt.psm1" }
 
 param([bool]$UseLegacyTabExpansion, [bool]$EnableProxyFunctionExpansion)
 
@@ -17,16 +17,30 @@ function __logEvent {}
     # -__PROFILER_WriteOn_LogEvent
 
 
-__logScopePush "no-prompt-req"
+__logScopePush "no-prompt-ctx"
 
-$Global:GitStatus = $null
-$script:GitVersion = [System.Version]"2.39.1"
+$global:GitStatus = $null
+$global:GitMissing = $false
+$script:GitCygwin = $false
+
+if ($Env:GitFunctionsCompletion -eq $true) {
+    $EnableProxyFunctionExpansion = $true
+}
 
 __logScopePop
 
 
 __logScopePush "posh-git.psm1"
 
+__logScopePush "CheckRequirements"
+if ($null -eq $Env:GitVersion) {
+    . $PSScriptRoot\CheckRequirements.ps1
+}
+else {
+    $script:GitVersion = $Env:GitVersion
+    __logEvent "GitVersion from environment: $GitVersion"
+}
+__logScopePop
 
 __logScopePush "Utils"
 . $PSScriptRoot\Utils.ps1

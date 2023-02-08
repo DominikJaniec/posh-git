@@ -549,7 +549,7 @@ if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
     $cmdNames += Get-Alias | Where-Object { $_.Definition -match $cmdNamesPattern } | Foreach-Object Name
 
     if ($EnableProxyFunctionExpansion) {
-        $funcNames += Get-ChildItem -Path Function:\ | Where-Object { $_.Definition -match $script:GitProxyFunctionRegex } | Foreach-Object Name
+        $funcNames = Get-ChildItem -Path Function:\ | Where-Object { $_.Definition -match $script:GitProxyFunctionRegex } | Foreach-Object Name
         $cmdNames += $funcNames
 
         # Create regex pattern from $funcNames e.g.: ^(Git-Checkout|Git-Switch)$
