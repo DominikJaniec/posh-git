@@ -11,10 +11,10 @@ function __logScopePush {}
 function __logScopePop {}
 function __logEvent {}
 
-# provides implementations of `__log*` methods:
+# # provides implementations of `__log*` methods:
 # . "$HOME\Repos\EnvConfigs\_tools\profiler.autogen.ps1" `
-    # -__PROFILER_SetDebugVerbose `
-    # -__PROFILER_WriteOn_LogEvent
+#     -__PROFILER_SetDebugVerbose `
+#     -__PROFILER_WriteOn_LogEvent
 
 
 __logScopePush "no-prompt-ctx"

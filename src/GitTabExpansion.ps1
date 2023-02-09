@@ -1,6 +1,7 @@
 # Initial implementation by Jeremy Skinner
 # http://www.jeremyskinner.co.uk/2010/03/07/using-git-with-windows-powershell/
 
+__logEvent "creating `$GitTabSettings instance"
 $Global:GitTabSettings = New-Object PSObject -Property @{
     AllCommands = $false
     KnownAliases = @{
@@ -11,6 +12,7 @@ $Global:GitTabSettings = New-Object PSObject -Property @{
     RegisteredCommands = ""
 }
 
+__logScopePush "gathering-comands"
 $subcommands = @{
     bisect = "start bad good skip reset visualize replay log run"
     notes = 'add append copy edit get-ref list merge prune remove show'
@@ -60,16 +62,23 @@ $script:someCommands = @('add','am','annotate','archive','bisect','blame','branc
                          'notes','prune','pull','push','rebase','reflog','remote','rerere','reset','restore','revert','rm',
                          'shortlog','show','stash','status','submodule','svn','switch','tag','whatchanged', 'worktree')
 
+
+__logEvent "checking for usage of 'update-git-for-windows'"
 if ((($PSVersionTable.PSVersion.Major -eq 5) -or $IsWindows) -and ($script:GitVersion -ge [System.Version]'2.16.2')) {
     $script:someCommands += 'update-git-for-windows'
 }
+__logEvent "command 'update-git-for-windows' added"
+
 
 $script:gitCommandsWithLongParams = $longGitParams.Keys -join '|'
 $script:gitCommandsWithShortParams = $shortGitParams.Keys -join '|'
 $script:gitCommandsWithParamValues = $gitParamValues.Keys -join '|'
 $script:vstsCommandsWithShortParams = $shortVstsParams.Keys -join '|'
 $script:vstsCommandsWithLongParams = $longVstsParams.Keys -join '|'
+__logScopePop
 
+
+__logEvent "resolving `$GitProxyFunctionRegex"
 # The regular expression here is roughly follows this pattern:
 #
 # <begin anchor><whitespace>*<git>(<whitespace><parameter>)*<whitespace>+<$args><whitespace>*<end anchor>
@@ -86,14 +95,22 @@ $script:vstsCommandsWithLongParams = $longVstsParams.Keys -join '|'
 # End Anchor   ($|[|;`n])
 $script:GitProxyFunctionRegex = "(^|[;`n])(\s*)(?<cmd>$(Get-AliasPattern git))(?<params>(([^\S\r\n]|[^\S\r\n]``\r?\n)+\S+)*)(([^\S\r\n]|[^\S\r\n]``\r?\n)+\`$args)(\s|``\r?\n)*($|[|;`n])"
 
-try {
-    if ($null -ne (git help -a 2>&1 | Select-String flow)) {
-        $script:someCommands += 'flow'
+__logScopePush "git-flow"
+if ($Env:GitFlow -eq $true) {
+    $script:someCommands += 'flow'
+    __logEvent "GitFlow from environment"
+}
+else {
+    try {
+        if ($null -ne (git help -a 2>&1 | Select-String flow)) {
+            $script:someCommands += 'flow'
+        }
+    }
+    catch {
+        Write-Debug "Search for 'flow' in 'git help' output failed with error: $_"
     }
 }
-catch {
-    Write-Debug "Search for 'flow' in 'git help' output failed with error: $_"
-}
+__logScopePop
 
 filter quoteStringWithSpecialChars {
     if ($_ -and ($_ -match '\s+|#|@|\$|;|,|''|\{|\}|\(|\)')) {
