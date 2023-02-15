@@ -96,19 +96,21 @@ __logEvent "resolving `$GitProxyFunctionRegex"
 $script:GitProxyFunctionRegex = "(^|[;`n])(\s*)(?<cmd>$(Get-AliasPattern git))(?<params>(([^\S\r\n]|[^\S\r\n]``\r?\n)+\S+)*)(([^\S\r\n]|[^\S\r\n]``\r?\n)+\`$args)(\s|``\r?\n)*($|[|;`n])"
 
 __logScopePush "git-flow"
-if ($Env:GitFlow -eq $true) {
-    $script:someCommands += 'flow'
-    __logEvent "GitFlow from environment"
-}
-else {
+if ($null -eq (Get-InitPropsExtension "flow")) {
     try {
         if ($null -ne (git help -a 2>&1 | Select-String flow)) {
-            $script:someCommands += 'flow'
+            $script:someCommands += "flow"
         }
     }
     catch {
         Write-Debug "Search for 'flow' in 'git help' output failed with error: $_"
     }
+}
+else {
+    if (Get-InitPropsExtension "flow") {
+        $script:someCommands += "flow"
+    }
+    __logEvent "GitFlow from environment"
 }
 __logScopePop
 
@@ -555,6 +557,38 @@ function WriteTabExpLog([string] $Message) {
     "[$timestamp] $Message" | Out-File -Append $global:GitTabSettings.LogPath
 }
 
+function Invoke-CompletionFor ($Text, $ScriptBlock) {
+    __logScopePush "completion"
+    __logEvent "for '$Text'"
+
+    try {
+        Invoke-Command -ScriptBlock $ScriptBlock
+    }
+    catch {
+        if ($global:PoshGit_InitProps.ShowCompletionErrors) {
+            Write-Warning ""
+            Write-Warning "_____________________________________________________________"
+            $autocompletedField = "'$Text' [$($Text.Length)]".PadLeft(49)
+            Write-Warning "Completing: $autocompletedField"
+
+            Write-Warning ("Encountered an exception:`n" + $_.InvocationInfo.PositionMessage)
+            foreach ($line in "$($_.Exception)" -split "`n") {
+                Write-Warning $line
+                if ($line -match "^\s*at System\.Management\.Automation\.Interpreter\..+$") {
+                    Write-Warning "(...)"
+                    break;
+                }
+            }
+        }
+
+        __logEvent "exception: $_"
+        throw $_
+    }
+    finally {
+        __logScopePop
+    }
+}
+
 
 __logScopePush "ArgumentCompleter"
 
@@ -579,8 +613,9 @@ if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
 
     Microsoft.PowerShell.Core\Register-ArgumentCompleter -CommandName $cmdNames -Native -ScriptBlock {
         param($wordToComplete, $commandAst, $cursorPosition)
-        __logScopePush "autocomplete"
+        $extext = $commandAst.Extent.Text
 
+        Invoke-CompletionFor $extext -ScriptBlock {
         # The PowerShell completion has a habit of stripping the trailing space when completing:
         # git checkout <tab>
         # The Expand-GitCommand expects this trailing space, so pad with a space if necessary.
@@ -590,28 +625,10 @@ if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
             $textToComplete = Expand-GitProxyFunction($textToComplete)
         }
 
-        $extext = $commandAst.Extent.Text
         WriteTabExpLog "Expand: command: '$extext', padded: '$textToComplete', padlen: $padLength"
 
-        try { Expand-GitCommand $textToComplete }
-        catch {
-            $extextField = "'$extext' [$($extext.Length)]".PadLeft(45)
-            Write-Warning ""
-            Write-Warning "_____________________________________________________________"
-            Write-Warning "While expanding:$extextField"
-            Write-Warning ("Encountered an exception:`n" + $_.InvocationInfo.PositionMessage)
-            foreach ($line in "$($_.Exception)" -split "`n") {
-                Write-Warning $line
-                if ($line -match "^\s*at System\.Management\.Automation\.Interpreter\..+$") {
-                    Write-Warning "(...)"
-                    break;
-                }
-            }
-
-            throw $_
+            Expand-GitCommand $textToComplete
         }
-
-        __logScopePop
     }
 }
 else {
@@ -621,6 +638,7 @@ else {
             param($Context, [ref]$TabExpansionHasOutput, [ref]$QuoteSpaces)
 
             $line = $Context.Line
+            Invoke-CompletionFor $line -ScriptBlock {
             $lastBlock = [regex]::Split($line, '[|;]')[-1].TrimStart()
             if ($EnableProxyFunctionExpansion) {
                 $lastBlock = Expand-GitProxyFunction($lastBlock)
@@ -628,6 +646,7 @@ else {
             $TabExpansionHasOutput.Value = $true
             WriteTabExpLog "PowerTab expand: '$lastBlock'"
             Expand-GitCommand $lastBlock
+            }
         }
 
         return
@@ -653,7 +672,9 @@ else {
 Microsoft.PowerShell.Core\Register-ArgumentCompleter -CommandName Remove-GitBranch -ParameterName Name -ScriptBlock {
     param($Command, $Parameter, $WordToComplete, $CommandAst, $FakeBoundParams)
 
+    Invoke-CompletionFor $WordToComplete -ScriptBlock {
     gitBranches $WordToComplete $true
+    }
 }
 
 __logScopePop

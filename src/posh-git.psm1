@@ -1,6 +1,5 @@
 #######################################################################
-# pwsh -NoProfile -NoExit -WorkingDirectory "$HOME\Repos\posh-git-no-prompt" -Command { function prompt { "custom-prompt> " }; Import-Module -Name "$HOME\Repos\posh-git-no-prompt\src\posh-git.psm1" }
-
+# pwsh -NoProfile -NoExit -WorkingDirectory "$HOME\Repos\posh-git" -Command { function prompt { "custom-prompt> " }; $global:PoshGit_InitProps = @{ DisablePoshGitPrompt = $true; ForcePoshGitPrompt = $true; UseLegacyTabExpansion = $true; UseFunctionCompletion = $true; ShowCompletionErrors = $true; LocalGitVersion = [System.Version]"2.39.1"; LocalGitCygwin = $true; LocalGitExtensions = @{ flow = $true } }; Import-Module -Name "$HOME\Repos\posh-git\src\posh-git.psm1" -ArgumentList @(1,1,1); exit }
 
 param([bool]$ForcePoshGitPrompt, [bool]$UseLegacyTabExpansion, [bool]$EnableProxyFunctionExpansion)
 
@@ -12,15 +11,126 @@ function __logScopePush {}
 function __logScopePop {}
 function __logEvent {}
 
-# provides implementations of `__log*` methods:
+# # provides implementations of `__log*` methods from above:
 # . "$HOME\Repos\EnvConfigs\_tools\profiler.autogen.ps1" `
-    # -__PROFILER_SetDebugVerbose `
-    # -__PROFILER_WriteOn_LogEvent
+#     -__PROFILER_SetDebugVerbose `
+#     -__PROFILER_WriteOn_LogEvent
+
+
+__logScopePush "log-warmup"
+__logEvent "using all log methods"
+__logScopePop
+
+
+__logScopePush "global-ctx"
+
+__logEvent "defining default InitProps"
+$Default_InitProps = @{
+    DisablePoshGitPrompt  = $false
+    ForcePoshGitPrompt    = $false
+    UseLegacyTabExpansion = $false
+    UseFunctionCompletion = $false
+    ShowCompletionErrors  = $false
+    LocalGitVersion       = [string]$null
+    LocalGitCygwin        = $false
+    LocalGitExtensions    = @{
+        "feature" = $false
+    }
+}
+
+function Get-InitPropsSkipPrompt () {
+    return $global:PoshGit_InitProps.DisablePoshGitPrompt `
+        -and -not $global:PoshGit_InitProps.ForcePoshGitPrompt
+}
+
+function Get-InitPropsExtension ([string]$Name) {
+    $exts = $global:PoshGit_InitProps.LocalGitExtensions
+
+    $keys = , $Name
+    $prefix = "git-"
+    $keys += $Name.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) `
+        ? $Name.Substring($prefix.Length) `
+        : $prefix + $Name
+
+    $matched = $exts.Keys `
+    | Where-Object { $_ -in $keys }
+    $matched = @($matched)
+
+    if ($matched.Length -eq 0) {
+        return $null
+    }
+    if ($matched.Length -eq 1) {
+        return $exts[$matched[0]]
+    }
+
+    $values = @($matched) `
+    | ForEach-Object { $exts[$_] } `
+    | Select-Object -Unique
+    $values = @($values)
+
+    if ($values.Length -eq 1) {
+        return $values[0]
+    }
+
+    $keys = $keys -join ", "
+    throw "ambiguous configuration with: $keys"
+}
+
+__logEvent "looking for PoshGit-InitProps"
+if (Test-Path variable:global:PoshGit_InitProps) {
+    foreach ($key in $Default_InitProps.Keys) {
+        if (-not $global:PoshGit_InitProps.ContainsKey($key)) {
+            __logEvent "using Default[$key]"
+            $global:PoshGit_InitProps[$key] = `
+                $Default_InitProps[$key]
+        }
+        else {
+            $val = $global:PoshGit_InitProps[$key]
+            if ($key -eq "LocalGitExtensions") {
+                $val = $val | ConvertTo-Json -Compress
+            }
+
+            __logEvent "`$InitProps[$key] = $val"
+        }
+    }
+}
+else {
+    $global:PoshGit_InitProps = `
+        $Default_InitProps.Clone()
+}
+
+
+__logScopePush "old-module-param"
+function WithVerboseAboutParam ($Name, $NewName = $null) {
+    $NewName ??= $Name
+    $props = "global:PoshGit_InitProps"
+    Write-Verbose "Insted of setting the '`$$Name' via 'Import-Module -ArgumentList', you can use:"
+    Write-Verbose "`t`$$props = `@{ $($NewName) = `$true; (...) }; Import-Module"
+    return $true
+}
+
+__logEvent "setting ``param()`` from `$global:PoshGit_InitProps"
+$ForcePoshGitPrompt = $ForcePoshGitPrompt -eq $true `
+    ? (WithVerboseAboutParam "ForcePoshGitPrompt") `
+    : $global:PoshGit_InitProps.ForcePoshGitPrompt
+
+$UseLegacyTabExpansion = $UseLegacyTabExpansion -eq $true `
+    ? (WithVerboseAboutParam "UseLegacyTabExpansion") `
+    : $global:PoshGit_InitProps.UseLegacyTabExpansion
+
+$EnableProxyFunctionExpansion = $EnableProxyFunctionExpansion -eq $true `
+    ? (WithVerboseAboutParam "EnableProxyFunctionExpansion" "UseFunctionCompletion") `
+    : $global:PoshGit_InitProps.UseFunctionCompletion
+
+__logScopePop
+
+__logScopePop
 
 
 __logScopePush "no-prompt-req"
 
-$Global:GitStatus = $null
+$global:GitMissing = $false
+$global:GitStatus = $null
 
 __logScopePop
 
@@ -33,35 +143,81 @@ if (Test-Path Env:\POSHGIT_ENABLE_STRICTMODE) {
     Set-StrictMode -Version Latest
 }
 
-__logEvent "executing CheckRequirements"
-. $PSScriptRoot\CheckRequirements.ps1 > $null
+if ($null -eq $global:PoshGit_InitProps.LocalGitVersion) {
+    __logEvent "executing CheckRequirements"
+    . $PSScriptRoot\CheckRequirements.ps1 > $null
+}
+else {
+    $ver = $global:PoshGit_InitProps.LocalGitVersion
+    $script:GitVersion = [System.Version]$ver
+
+    $cygwin = $global:PoshGit_InitProps.LocalGitCygwin
+    $script:GitCygwin = $cygwin
+
+    $gitState = $GitVersion
+    if ($GitCygwin) {
+        $gitState += " (cygwin)"
+    }
+    __logEvent "GitVersion from environment: $gitState"
+}
+__logScopePop
+
 
 function switchLogScope ($name) {
     __logScopePop
     __logScopePush $name
 }
 
-
-switchLogScope "ConsoleMode"
-. $PSScriptRoot\ConsoleMode.ps1
 switchLogScope "Utils"
 . $PSScriptRoot\Utils.ps1
-switchLogScope "AnsiUtils"
-. $PSScriptRoot\AnsiUtils.ps1
-switchLogScope "WindowTitle"
-. $PSScriptRoot\WindowTitle.ps1
-switchLogScope "PoshGitTypes"
-. $PSScriptRoot\PoshGitTypes.ps1
+
+if (-not $(Get-InitPropsSkipPrompt)) {
+    switchLogScope "ConsoleMode"
+    . $PSScriptRoot\ConsoleMode.ps1
+    switchLogScope "AnsiUtils"
+    . $PSScriptRoot\AnsiUtils.ps1
+    switchLogScope "WindowTitle"
+    . $PSScriptRoot\WindowTitle.ps1
+    switchLogScope "PoshGitTypes"
+    . $PSScriptRoot\PoshGitTypes.ps1
+    switchLogScope "GitPrompt"
+    . $PSScriptRoot\GitPrompt.ps1
+}
+
 switchLogScope "GitUtils"
 . $PSScriptRoot\GitUtils.ps1
-switchLogScope "GitPrompt"
-. $PSScriptRoot\GitPrompt.ps1
 switchLogScope "GitParamTabExpansion"
 . $PSScriptRoot\GitParamTabExpansion.ps1
 switchLogScope "GitTabExpansion"
 . $PSScriptRoot\GitTabExpansion.ps1
+
+
+if ($(Get-InitPropsSkipPrompt)) {
+    switchLogScope "export-no-prompt"
+
+    $exportModuleMemberParams = @{
+        Function = @(
+            'Add-PoshGitToProfile',
+            'Expand-GitCommand',
+            'Get-GitDirectory',
+            'Get-GitStatus',
+            'Get-PromptConnectionInfo',
+            'Get-PromptPath',
+            'Remove-GitBranch',
+            'Remove-PoshGitFromProfile',
+            'Update-AllBranches'
+        )
+    }
+
+    Export-ModuleMember @exportModuleMemberParams
+    __logScopePop
+    exit
+}
+
+
 switchLogScope "TortoiseGit"
 . $PSScriptRoot\TortoiseGit.ps1
+
 
 switchLogScope "IsAdmin"
 $IsAdmin = Test-Administrator
@@ -176,7 +332,7 @@ $currentPromptDef = if ($funcInfo = Get-Command prompt -ErrorAction SilentlyCont
 
 # If prompt matches pre-0.7 posh-git prompt, ignore it
 $collapsedLegacyPrompt = '$realLASTEXITCODE = $LASTEXITCODE;Write-Host($pwd.ProviderPath) -nonewline;Write-VcsStatus;$global:LASTEXITCODE = $realLASTEXITCODE;return "> "'
-if ($currentPromptDef -and (($currentPromptDef.Trim() -replace '[\r\n\t]+\s*',';') -eq $collapsedLegacyPrompt)) {
+if ($currentPromptDef -and (($currentPromptDef.Trim() -replace '[\r\n\t]+\s*', ';') -eq $collapsedLegacyPrompt)) {
     Write-Warning 'Replacing old posh-git prompt. Did you copy profile.example.ps1 into $PROFILE?'
     $currentPromptDef = $null
 }
@@ -248,7 +404,4 @@ $exportModuleMemberParams = @{
 }
 
 Export-ModuleMember @exportModuleMemberParams
-__logScopePop
-
-
 __logScopePop
