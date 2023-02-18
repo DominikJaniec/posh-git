@@ -616,16 +616,16 @@ if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
         $extext = $commandAst.Extent.Text
 
         Invoke-CompletionFor $extext -ScriptBlock {
-        # The PowerShell completion has a habit of stripping the trailing space when completing:
-        # git checkout <tab>
-        # The Expand-GitCommand expects this trailing space, so pad with a space if necessary.
-        $padLength = $cursorPosition - $commandAst.Extent.StartOffset
-        $textToComplete = $commandAst.ToString().PadRight($padLength, ' ').Substring(0, $padLength)
-        if ($EnableProxyFunctionExpansion) {
-            $textToComplete = Expand-GitProxyFunction($textToComplete)
-        }
+            # The PowerShell completion has a habit of stripping the trailing space when completing:
+            # git checkout <tab>
+            # The Expand-GitCommand expects this trailing space, so pad with a space if necessary.
+            $padLength = $cursorPosition - $commandAst.Extent.StartOffset
+            $textToComplete = $commandAst.ToString().PadRight($padLength, ' ').Substring(0, $padLength)
+            if ($EnableProxyFunctionExpansion) {
+                $textToComplete = Expand-GitProxyFunction($textToComplete)
+            }
 
-        WriteTabExpLog "Expand: command: '$extext', padded: '$textToComplete', padlen: $padLength"
+            WriteTabExpLog "Expand: command: '$extext', padded: '$textToComplete', padlen: $padLength"
 
             Expand-GitCommand $textToComplete
         }
@@ -639,13 +639,13 @@ else {
 
             $line = $Context.Line
             Invoke-CompletionFor $line -ScriptBlock {
-            $lastBlock = [regex]::Split($line, '[|;]')[-1].TrimStart()
-            if ($EnableProxyFunctionExpansion) {
-                $lastBlock = Expand-GitProxyFunction($lastBlock)
-            }
-            $TabExpansionHasOutput.Value = $true
-            WriteTabExpLog "PowerTab expand: '$lastBlock'"
-            Expand-GitCommand $lastBlock
+                $lastBlock = [regex]::Split($line, '[|;]')[-1].TrimStart()
+                if ($EnableProxyFunctionExpansion) {
+                    $lastBlock = Expand-GitProxyFunction($lastBlock)
+                }
+                $TabExpansionHasOutput.Value = $true
+                WriteTabExpLog "PowerTab expand: '$lastBlock'"
+                Expand-GitCommand $lastBlock
             }
         }
 
@@ -673,7 +673,7 @@ Microsoft.PowerShell.Core\Register-ArgumentCompleter -CommandName Remove-GitBran
     param($Command, $Parameter, $WordToComplete, $CommandAst, $FakeBoundParams)
 
     Invoke-CompletionFor $WordToComplete -ScriptBlock {
-    gitBranches $WordToComplete $true
+        gitBranches $WordToComplete $true
     }
 }
 

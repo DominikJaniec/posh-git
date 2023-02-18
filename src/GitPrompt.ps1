@@ -1,9 +1,10 @@
-﻿# Inspired by Mark Embling
+# Inspired by Mark Embling
 # http://www.markembling.info/view/my-ideal-powershell-prompt-with-git-integration
 
 $global:GitPromptSettings = [PoshGitPromptSettings]::new()
 $global:GitPromptValues = [PoshGitPromptValues]::new()
 
+__logEvent "fixing `$global:GitPromptSettings"
 # Override some of the normal colors if the background color is set to the default DarkMagenta.
 $s = $global:GitPromptSettings
 if ($Host.UI.RawUI.BackgroundColor -eq [ConsoleColor]::DarkMagenta) {
@@ -14,6 +15,7 @@ if ($Host.UI.RawUI.BackgroundColor -eq [ConsoleColor]::DarkMagenta) {
     $s.WorkingColor.ForegroundColor             = 'Red'
 }
 
+__logEvent "sub-module functions"
 <#
 .SYNOPSIS
     Creates a new instance of a PoshGitPromptSettings object that can be assigned to $GitPromptSettings.
@@ -914,7 +916,9 @@ function Global:Write-VcsStatus {
 # Add scriptblock that will execute for Write-VcsStatus
 $PoshGitVcsPrompt = {
     try {
+        __logEvent "calling Get-GitStatus"
         $global:GitStatus = Get-GitStatus
+        __logEvent "writting status"
         Write-GitStatus $GitStatus
     }
     catch {
