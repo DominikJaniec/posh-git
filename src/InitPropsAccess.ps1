@@ -12,7 +12,9 @@ else {
 }
 
 function Get-ParamOverrideOf ($ParamValue, $ParamName, $GlobalName = $null) {
-    $GlobalName ??= $ParamName
+    if ($null -eq $GlobalName) {
+        $GlobalName = $ParamName
+    }
 
     if ($ParamValue -eq $true) {
         $props = "global:PoshGit_InitProps"
