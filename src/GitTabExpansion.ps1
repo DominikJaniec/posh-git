@@ -538,19 +538,19 @@ function WriteTabExpLog([string] $Message) {
 }
 
 if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
-    $cmdNames = "git","tgit","gitk"
+    $cmdNames = "git", "tgit", "gitk"
 
     # Create regex pattern from $cmdNames: ^(git|git\.exe|tgit|tgit\.exe|gitk|gitk\.exe)$
     $cmdNamesPattern = "^($($cmdNames -join '|'))(\.exe)?$"
-    $cmdNames += Get-Alias | Where-Object { $_.Definition -match $cmdNamesPattern } | Foreach-Object Name
+    $cmdNames += Get-Alias | Where-Object { $_.Definition -match $cmdNamesPattern } | ForEach-Object Name
 
     if ($EnableProxyFunctionExpansion) {
-        $funcNames += Get-ChildItem -Path Function:\ | Where-Object { $_.Definition -match $script:GitProxyFunctionRegex } | Foreach-Object Name
+        $funcNames = Get-ChildItem -Path Function:\ | Where-Object { $_.Definition -match $script:GitProxyFunctionRegex } | ForEach-Object Name
         $cmdNames += $funcNames
 
         # Create regex pattern from $funcNames e.g.: ^(Git-Checkout|Git-Switch)$
         $funcNamesPattern = "^($($funcNames -join '|'))$"
-        $cmdNames += Get-Alias | Where-Object { $_.Definition -match $funcNamesPattern } | Foreach-Object Name
+        $cmdNames += Get-Alias | Where-Object { $_.Definition -match $funcNamesPattern } | ForEach-Object Name
     }
 
     $global:GitTabSettings.RegisteredCommands = $cmdNames -join ", "
