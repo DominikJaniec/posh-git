@@ -154,7 +154,7 @@ function ResetGitTempRepoWorkingDir($RepoPath, $Branch = 'master') {
 }
 
 Remove-Item Function:\prompt
-Remove-Variable PoshGit_InitProps -Scope Global
+Remove-Variable PoshGit_InitProps -Scope Global -Force *>$null
 Remove-Module posh-git -Force *>$null
 
 # For Pester testing, enable strict mode inside the posh-git module

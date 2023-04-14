@@ -54,6 +54,7 @@ Describe 'TabExpansion Tests' {
             }
         }
     }
+
     Context 'Fetch/Push/Pull TabExpansion Tests' {
         BeforeEach {
             # Ensure master branch exists
@@ -371,6 +372,59 @@ Describe 'TabExpansion Tests' {
 
             $result = & $module GitTabExpansionInternal 'git add ' $gitStatus
             $result | Should -BeExactly $fileName
+        }
+    }
+
+    Context 'Completion-Errors Handling' {
+        InModuleScope "posh-git" {
+            Context 'When Disabled InitProps.ShowCompletionErrors' {
+                BeforeEach {
+                    $global:PoshGit_InitProps.ShowCompletionErrors = $false
+                }
+
+                It 'Does not write anything into Warning stream' {
+                    Mock Write-Warning {}
+
+                    $errorMessage = "something went wrong..."
+                    $action = {
+                        Invoke-CompletionFor "anything" {
+                            throw $errorMessage
+                        }
+                    }
+
+                    $action | Should -Throw -ExpectedMessage $errorMessage
+                    Should -Not -Invoke Write-Warning
+                }
+            }
+
+            Context 'When Enabled InitProps.ShowCompletionErrors' {
+                BeforeEach {
+                    $global:PoshGit_InitProps.ShowCompletionErrors = $true
+                }
+
+                It 'Writes error into Warning stream with provided Text' {
+                    $warningLog = [System.Text.StringBuilder]::new()
+
+                    Mock -CommandName Write-Warning -MockWith {
+                        $line = "$($PesterBoundParameters.Message)"
+                        $warningLog.AppendLine($line) `
+                        | Out-Null
+                    }
+
+                    $completionText = "magic --make-example"
+                    $completionError = "got completion failure"
+                    $completionScript = { throw $completionError }
+                    $action = {
+                        Invoke-CompletionFor $completionText $completionScript
+                    }
+
+                    $action | Should -Throw -ExpectedMessage $completionError
+
+                    Should -Invoke Write-Warning
+                    $warningLog | Should -Match $completionText
+                    $warningLog | Should -Match $completionError
+                }
+            }
         }
     }
 }

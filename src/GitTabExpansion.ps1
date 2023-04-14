@@ -537,6 +537,32 @@ function WriteTabExpLog([string] $Message) {
     "[$timestamp] $Message" | Out-File -Append $global:GitTabSettings.LogPath
 }
 
+function Invoke-CompletionFor ($Text, $ScriptBlock) {
+    try {
+        Invoke-Command -ScriptBlock $ScriptBlock
+    }
+    catch {
+        if ($global:PoshGit_InitProps.ShowCompletionErrors) {
+            Write-Warning ""
+            Write-Warning "_____________________________________________________________"
+            $autocompletedField = "'$Text' [$($Text.Length)]".PadLeft(49)
+            Write-Warning "Completing: $autocompletedField"
+
+            Write-Warning ("Encountered an exception:`n" + $_.InvocationInfo.PositionMessage)
+            foreach ($line in "$($_.Exception)" -split "`n") {
+                Write-Warning $line
+                if ($line -match "^\s*at System\.Management\.Automation\.Interpreter\..+$") {
+                    Write-Warning "(...)"
+                    break;
+                }
+            }
+        }
+
+        throw $_
+    }
+}
+
+
 if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
     $cmdNames = "git", "tgit", "gitk"
 
@@ -557,18 +583,22 @@ if (!$UseLegacyTabExpansion -and ($PSVersionTable.PSVersion.Major -ge 6)) {
 
     Microsoft.PowerShell.Core\Register-ArgumentCompleter -CommandName $cmdNames -Native -ScriptBlock {
         param($wordToComplete, $commandAst, $cursorPosition)
+        $extext = $commandAst.Extent.Text
 
-        # The PowerShell completion has a habit of stripping the trailing space when completing:
-        # git checkout <tab>
-        # The Expand-GitCommand expects this trailing space, so pad with a space if necessary.
-        $padLength = $cursorPosition - $commandAst.Extent.StartOffset
-        $textToComplete = $commandAst.ToString().PadRight($padLength, ' ').Substring(0, $padLength)
-        if ($EnableProxyFunctionExpansion) {
-            $textToComplete = Expand-GitProxyFunction($textToComplete)
+        Invoke-CompletionFor $extext -ScriptBlock {
+            # The PowerShell completion has a habit of stripping the trailing space when completing:
+            # git checkout <tab>
+            # The Expand-GitCommand expects this trailing space, so pad with a space if necessary.
+            $padLength = $cursorPosition - $commandAst.Extent.StartOffset
+            $textToComplete = $commandAst.ToString().PadRight($padLength, ' ').Substring(0, $padLength)
+            if ($EnableProxyFunctionExpansion) {
+                $textToComplete = Expand-GitProxyFunction($textToComplete)
+            }
+
+            WriteTabExpLog "Expand: command: '$extext', padded: '$textToComplete', padlen: $padLength"
+
+            Expand-GitCommand $textToComplete
         }
-
-        WriteTabExpLog "Expand: command: '$($commandAst.Extent.Text)', padded: '$textToComplete', padlen: $padLength"
-        Expand-GitCommand $textToComplete
     }
 }
 else {
@@ -578,13 +608,15 @@ else {
             param($Context, [ref]$TabExpansionHasOutput, [ref]$QuoteSpaces)
 
             $line = $Context.Line
-            $lastBlock = [regex]::Split($line, '[|;]')[-1].TrimStart()
-            if ($EnableProxyFunctionExpansion) {
-                $lastBlock = Expand-GitProxyFunction($lastBlock)
+            Invoke-CompletionFor $line -ScriptBlock {
+                $lastBlock = [regex]::Split($line, '[|;]')[-1].TrimStart()
+                if ($EnableProxyFunctionExpansion) {
+                    $lastBlock = Expand-GitProxyFunction($lastBlock)
+                }
+                $TabExpansionHasOutput.Value = $true
+                WriteTabExpLog "PowerTab expand: '$lastBlock'"
+                Expand-GitCommand $lastBlock
             }
-            $TabExpansionHasOutput.Value = $true
-            WriteTabExpLog "PowerTab expand: '$lastBlock'"
-            Expand-GitCommand $lastBlock
         }
 
         return
@@ -610,5 +642,7 @@ else {
 Microsoft.PowerShell.Core\Register-ArgumentCompleter -CommandName Remove-GitBranch -ParameterName Name -ScriptBlock {
     param($Command, $Parameter, $WordToComplete, $CommandAst, $FakeBoundParams)
 
-    gitBranches $WordToComplete $true
+    Invoke-CompletionFor $WordToComplete -ScriptBlock {
+        gitBranches $WordToComplete $true
+    }
 }

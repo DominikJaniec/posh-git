@@ -10,6 +10,7 @@ $Default_InitProps = @{
     ForcePoshGitPrompt    = $false
     UseLegacyTabExpansion = $false
     UseFunctionCompletion = $false
+    ShowCompletionErrors  = $false
 }
 
 . $PSScriptRoot\InitPropsAccess.ps1 `

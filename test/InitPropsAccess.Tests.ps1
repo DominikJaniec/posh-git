@@ -13,6 +13,7 @@ Describe "PoshGit_InitProps" {
             , "ForcePoshGitPrompt" `
             , "UseLegacyTabExpansion" `
             , "UseFunctionCompletion" `
+            , "ShowCompletionErrors" `
         | Sort-Object
 
         $global:PoshGit_InitProps.Keys `
@@ -67,18 +68,13 @@ Describe "Get-ParamOverrideOf" {
             Context "Verbose tutorial of alternative to ArgumentList" {
                 BeforeEach {
                     [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssigments', '')]
-                    $originalVerbosePreference = $VerbosePreference
-                    $VerbosePreference = "Continue"
-
                     $verboseLog = [System.Text.StringBuilder]::new()
+
                     Mock -CommandName Write-Verbose -MockWith {
                         $line = "$($PesterBoundParameters.Message)"
                         $verboseLog.AppendLine($line) `
                         | Out-Null
                     }
-                }
-                AfterEach {
-                    $VerbosePreference = $originalVerbosePreference
                 }
 
                 It "shows a given ParamName as PoshGit_InitProps key" {
@@ -86,12 +82,14 @@ Describe "Get-ParamOverrideOf" {
                         -ParamName "ModuleArgumentName" `
                     | Should -Be $true
 
-                    $verboseLog.ToString().Trim() | Should -Be @"
+                    Should -Invoke Write-Verbose
+                    $verboseLog | Should -Be @"
 The 'Import-Module -ArgumentList (...)' could be replaced with:
 `t> `$global:PoshGit_InitProps = @{
 `t>`t "ModuleArgumentName" = `$true;
 `t>`t (...) }
 `t> Import-Module
+
 "@
                 }
 
@@ -101,13 +99,15 @@ The 'Import-Module -ArgumentList (...)' could be replaced with:
                         -GlobalName "TheNewOne" `
                     | Should -Be $true
 
-                    $verboseLog.ToString().Trim() | Should -Be @"
+                    Should -Invoke Write-Verbose
+                    $verboseLog | Should -Be @"
 The 'Import-Module -ArgumentList (...)' could be replaced with:
 `t> `$OldArgumentName = "TheNewOne"
 `t> `$global:PoshGit_InitProps = @{
 `t>`t "`$OldArgumentName" = `$true;
 `t>`t (...) }
 `t> Import-Module
+
 "@
                 }
             }
